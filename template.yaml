@@ -1,0 +1,93 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  adobeio-auth
+
+  SAM Template for Adobe I/O OAuth 2.0 Authentication Proxy.
+
+Parameters:
+  AdobeApiKey:
+    Type: String
+  AdobeApiSecret:
+    Type: String
+  StageName:
+    Type: String
+    Default: dev
+  LogLevel:
+    Type: String
+    Description: Log level.
+    Default: INFO
+    AllowedValues:
+      - TRACE
+      - DEBUG
+      - INFO
+      - NOTICE
+      - WARNING
+      - ERROR
+      - CRITICAL
+  Tracing:
+    Type: String
+    Description: X-Ray tracing mode.
+    Default: Active
+    AllowedValues:
+      - Active
+      - PassThrough
+
+Globals:
+  Function:
+    Environment:
+      Variables:
+        ADOBE_API_KEY: !Ref AdobeApiKey
+        ADOBE_API_SECRET: !Ref AdobeApiSecret
+        LOG_LEVEL: !Ref LogLevel
+    Timeout: 3
+    Tracing: !Ref Tracing
+    AutoPublishAlias: live
+
+Resources:
+  ApiGateway:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref StageName
+
+  AdobeAuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: Adobe I/O OAuth 2.0 Authentication Proxy
+      CodeUri: adobe_auth/
+      Handler: app.lambda_handler
+      Runtime: python3.8
+      Policies:
+        - AWSXrayWriteOnlyAccess
+      Events:
+        AuthorizeEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiGateway
+            Path: /adobe/authorize
+            Method: get
+        AuthorizeCallbackEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiGateway
+            Path: /adobe/authorize/callback
+            Method: get
+        TokenEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiGateway
+            Path: /adobe/token
+            Method: post
+
+Outputs:
+  AuthApi:
+    Description: "Adobe I/O OAuth 2.0 Authentication Proxy Endpoint"
+    Value: !Sub "https://${ApiGateway}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${StageName}/adobe/authorize"
+
+  RedirectApi:
+    Description: "Adobe I/O OAuth 2.0 Authorization Redirect URI"
+    Value: !Sub "https://${ApiGateway}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${StageName}/adobe/authorize/callback"
+
+  TokenApi:
+    Description: "Adobe I/O OAuth 2.0 Token Proxy Endpoint"
+    Value: !Sub "https://${ApiGateway}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${StageName}/adobe/token"
